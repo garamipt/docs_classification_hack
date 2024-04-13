@@ -41,15 +41,17 @@
     <div class="container">
         <div class="input-group justify-content-center">
             <h2 id="form_title">Подать документы</h2>
-            {% if wrong_docs %}
+            {% if wrong_docs == "4" %}
+            <p class="danger">Выберите набор документов</p>
+            {% elif wrong_docs%}
             <p class="danger">Неверный пакет документов</p>
             {% endif %}
             <form action="/upload" method="post" enctype="multipart/form-data">
                 <select class="form-select form-select-sm" aria-label=".form-select-sm example" name="service">
-                    <option selected>Open this select menu</option>
-                    <option value="1">One</option>
-                    <option value="2">Two</option>
-                    <option value="3">Three</option>
+                    <option selected value=4>Выберите набор документов</option>
+                    <option value=0>Набор #1 (Договор, акт, приказ)</option>
+                    <option value=1>Набор #2 (Соглашение)</option>
+                    <option value=2>Набор #3 (Заявление, акт, приказ, соглашение)</option>
                 </select>
                 <input class="form-control" id="formFileLg" type="file" name="files" aria-describedby="button-addon2" multiple>
                 <button type="submit" class="btn btn-dark" id="button-addon2">Отправить</button>

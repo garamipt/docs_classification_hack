@@ -14,6 +14,11 @@ import pandas as pd
 import numpy as np
 from catboost import Pool, CatBoostClassifier
 import docx
+from converter import read_file
+import os
+from pathlib import Path
+import time
+
 
 def getText(filename):
     doc = docx.Document(filename)
@@ -21,7 +26,10 @@ def getText(filename):
     for para in doc.paragraphs:
         fullText.append(para.text)
     return '\n'.join(fullText)
-
+def read_txt(filename):
+    with open("test.txt") as f:
+        text = f.read()
+    return text
 spell = Speller("ru")
 morph = pymorphy2.MorphAnalyzer()
 
@@ -80,9 +88,19 @@ def predict(uploaded_files):
             try:
                 text_df.loc[i] = ["unknown", parse_rtf("uploads/" + uploaded_file.filename)]
             except:
-                text_df.loc[i] = ["unknown", "Договор"]
+                try:
+                    text_df.loc[i] = ["unknown", read_file("uploads/" + uploaded_file.filename)]
+                except:
+                    text_df.loc[i] = ["unknown", "Договор"]
         elif uploaded_file.filename.split(".")[1] == "docx":
             text_df.loc[i] = ["unknown", getText("uploads/" + uploaded_file.filename)]
+        elif uploaded_file.filename.split(".")[1] == "txt":
+            text_df.loc[i] = ["unknown", read_txt("uploads/" + uploaded_file.filename)]
+        else:
+            try:
+                text_df.loc[i] = ["unknown", read_file("uploads/" + uploaded_file.filename)]
+            except:
+                text_df.loc[i] = ["unknown", "Договор"]
         i += 1
     text_df["20_words"] = text_df["text"].apply(get_20_words)
     data, _ = process_data(text_df)
@@ -96,7 +114,6 @@ def predict(uploaded_files):
     del data_2['text']
     del data_2['20_words']
     X_val = data_2.drop(columns=['lemm_text', 'class', data_2.columns[0]])
-    X_val.to_csv("prepared.csv")
     catboss = CatBoostClassifier()
     catboss.load_model("catbossv1")
     y_pred = catboss.predict(X_val)
@@ -116,18 +133,33 @@ admin = Admin(app=app, name='Admin', url='/admin', template_mode='bootstrap4')
 def index():
     wrong_docs = request.args.get("wrong_docs")
     return render_template("index.html", wrong_docs = wrong_docs)
+    
+@app.route("/index")
+def index_2():
+    wrong_docs = request.args.get("wrong_docs")
+    return render_template("index.html", wrong_docs = wrong_docs)
 
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    service = request.form["service"]
+    sets = [set(["contract", "act", "order"]), set(["arrangement"]), set(["application", "act", "order", "arrangement"])]
+    print(request.form["service"] == "4")
+    if request.form["service"] == "4":
+        return redirect(url_for("index", wrong_docs=4))
+    service = int(request.form["service"])
     uploaded_files = request.files.getlist("files")
     # if len(uploaded_files) != service:
     #     return redirect(url_for("", wrong_docs="True"))
     for file_one in uploaded_files:
         file_one.save(os.path.join(app.config['UPLOAD_FOLDER'], file_one.filename))
     # mongo.save_file(uploaded_files.filename, uploaded_files)
-    return redirect(url_for("success", uploaded_files=",".join([class_one for class_one in predict(uploaded_files)]), filenames=','.join([uploaded_file.filename for uploaded_file in uploaded_files])))
+    predicted = predict(uploaded_files)
+    print(predicted)
+    print(set(predicted))
+    print(sets[service])
+    if set(predicted) != sets[service]:
+        return redirect(url_for("index", wrong_docs=True))
+    return redirect(url_for("success", uploaded_files=",".join([class_one for class_one in predicted]), filenames=','.join([uploaded_file.filename for uploaded_file in uploaded_files])))
     # return render_template("file_uploaded.html", file_name=uploaded_file.filename)
 
 @app.route("/success")
