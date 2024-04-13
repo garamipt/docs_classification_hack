@@ -14,13 +14,16 @@ admin = Admin(app=app, name='Admin', url='/admin', template_mode='bootstrap4')
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    wrong_docs = request.args.get("wrong_docs")
+    return render_template("index.html", wrong_docs = wrong_docs)
 
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    print(0)
+    service = request.form["service"]
     uploaded_files = request.files.getlist("files")
+    # if len(uploaded_files) != service:
+    #     return redirect(url_for("", wrong_docs="True"))
     for file_one in uploaded_files:
         file_one.save(os.path.join(app.config['UPLOAD_FOLDER'], file_one.filename))
     # mongo.save_file(uploaded_files.filename, uploaded_files)
@@ -31,5 +34,9 @@ def upload():
 def success():
     uploaded_files = request.args.get("uploaded_files")
     return render_template("file_uploaded.html", file_name=uploaded_files)
+
+@app.route("/team")
+def team():
+    return render_template("team.html")
 
 app.run(host='0.0.0.0',port=5000, debug=True)
