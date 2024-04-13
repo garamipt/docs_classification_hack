@@ -39,4 +39,7 @@ def success():
 def team():
     return render_template("team.html")
 
-app.run(host='0.0.0.0',port=5000, debug=True)
+if __name__ == "__main__":
+    from waitress import serve
+
+    serve(app, host="192.168.68.100", port=7776)
