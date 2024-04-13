@@ -20,15 +20,16 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload():
     print(0)
-    uploaded_file = request.files["file"]
-    uploaded_file.save(os.path.join(app.config['UPLOAD_FOLDER'], uploaded_file.filename))
-    mongo.save_file(uploaded_file.filename, uploaded_file)
-    return redirect(url_for("success", uploaded_file=uploaded_file.filename))
+    uploaded_files = request.files.getlist("files")
+    for file_one in uploaded_files:
+        file_one.save(os.path.join(app.config['UPLOAD_FOLDER'], file_one.filename))
+    # mongo.save_file(uploaded_files.filename, uploaded_files)
+    return redirect(url_for("success", uploaded_files=",".join([file_one.filename for file_one in uploaded_files])))
     # return render_template("file_uploaded.html", file_name=uploaded_file.filename)
 
 @app.route("/success")
 def success():
-    uploaded_file = request.args.get("uploaded_file")
-    return render_template("file_uploaded.html", file_name=uploaded_file)
+    uploaded_files = request.args.get("uploaded_files")
+    return render_template("file_uploaded.html", file_name=uploaded_files)
 
 app.run(host='0.0.0.0',port=5000, debug=True)
