@@ -2,22 +2,16 @@ from flask import Flask, render_template, request, redirect, url_for
 from flask_pymongo import PyMongo
 from flask_admin import Admin
 import os
-import os
 import pandas as pd
 from pyth.plugins.plaintext.writer import PlaintextWriter
 from pyth.plugins.rtf15.reader import Rtf15Reader 
 import re
 import pymorphy2
 from autocorrect import Speller
-import spacy
-import pandas as pd
 import numpy as np
-from catboost import Pool, CatBoostClassifier
+from catboost import CatBoostClassifier
 import docx
 from converter import read_file
-import os
-from pathlib import Path
-import time
 
 
 def getText(filename):
@@ -44,6 +38,21 @@ def process_data(data, text_cols=['text']):
             text_col
         ].str.replace("[\(\[].*?[\)\]]", "", regex=True)
 
+        data.loc[:, f"lemm_{text_col}"] = data.apply(
+            lambda x: lemmatize(spell(x[text_col])), axis=1
+        )
+    return data, new_text_cols
+
+def latest_process_data(data, text_cols=['40_words']):
+    new_text_cols = [f'lemm_{text_col}' for text_col in text_cols] + text_cols
+    for text_col in text_cols:
+        data[text_col] = data[
+            text_col
+        ].apply(remove_control_symbols)
+        
+        data[text_col] = data[
+            text_col
+        ].str.replace("[\(\[].*?[\)\]]", "", regex=True)
         data.loc[:, f"lemm_{text_col}"] = data.apply(
             lambda x: lemmatize(spell(x[text_col])), axis=1
         )
@@ -78,9 +87,15 @@ def parse_rtf(file_path):
 
 def get_20_words(text):
     words = text.split()
-    return " ".join(words[:20])
+    res = words[:20] if len(words) >= 20 else words
+    return " ".join(res)
 
-def predict(uploaded_files):
+def get_40_words(text):
+    words = text.split()
+    res = words[:40] if len(words) >= 40 else words
+    return " ".join(res)
+
+def predict(uploaded_files, use_latest=True):
     text_df = pd.DataFrame({"class": [], "text": []})
     i = 0
     for uploaded_file in uploaded_files:
@@ -102,20 +117,64 @@ def predict(uploaded_files):
             except:
                 text_df.loc[i] = ["unknown", "Договор"]
         i += 1
-    text_df["20_words"] = text_df["text"].apply(get_20_words)
-    data, _ = process_data(text_df)
-    data_2, short_text = process_data(data, ['20_words'])
+
+    if use_latest:
+        text_df["40_words"] = text_df["text"].apply(get_40_words)
+    else:
+        text_df["20_words"] = text_df["text"].apply(get_20_words)
+
+    if use_latest:
+        text_df = text_df.drop(columns=['text'])
+
+        data, _ = latest_process_data(text_df)
+        data_2 = data
+        added_words = ['иск', 'накладная', 'акт', 'акт проверки', 
+                       'инн', 'огрн', 'бик', 'покупатель', 
+                        'счет-оферта', 'счет', 'расторжение', 
+                        'услуга','трудовой', 'заявка', 'исполнение', 
+                        'поручение', 'правила', 'правило', 'покупка', 
+                        "продажа", 'купля', 'купля-продажа', 
+                        'купли-продажи', 'неустойка', 'возмещение', 
+                        'указ', 'кодекс', 'раздел', 'общество', 'приказ', 
+                        'приказываю', 'оказание', 'решение', 'собрание', 
+                        'федеральный', 'письмо', 'ооо', 'оао', 'индивидуальный',
+                        'уполномочивать', 'доверенность на', 'доверяю']
+    else:
+        data, _ = process_data(text_df)
+        data_2, _ = process_data(data, ['20_words'])
+
     uniq_lemm_classes = np.array(['соглашение', 'заявление', 'доверенность', 'договор', 'акт',
        'приказ', 'решение', 'устав', 'договор оферты', 'счет',
        'приложение'])
-    data_2[f'count_соглашение'] = data_2['lemm_20_words'].apply(lambda x: x.count("соглашение"))
-    for i in uniq_lemm_classes[1:]:
-        data_2[f'count_{i}'] = data_2['lemm_20_words'].str.count(rf'\b{i}\b')
-    del data_2['text']
-    del data_2['20_words']
-    X_val = data_2.drop(columns=['lemm_text', 'class', data_2.columns[0]])
+    
+    if use_latest:
+        data_2[f'count_соглашение'] = data_2['lemm_40_words'].apply(lambda x: x.count("соглашение"))
+        for i in (list(uniq_lemm_classes) + added_words)[1:]:
+            data_2[f'count_{i}'] = data_2['lemm_40_words'].str.count(rf'\b{i}\b')
+        data_2[f'count_оферта'] = data_2['lemm_40_words'].apply(lambda x: x.count("оферта"))
+        data_2[f'count_оферта'] = data_2['lemm_40_words'].apply(lambda x: x.count("офферта"))
+        data_2[f'count_исполнитель'] = data_2['lemm_40_words'].apply(lambda x: x.count("исполнитель"))
+        data_2[f'count_подрядчик'] = data_2['lemm_40_words'].apply(lambda x: x.count("подрядчик"))
+        data_2[f'count_заказчик'] = data_2['lemm_40_words'].apply(lambda x: x.count("заказчик"))
+        data_2[f'count_поручитель'] = data_2['lemm_40_words'].apply(lambda x: x.count("поручитель"))
+    else:
+        data_2[f'count_соглашение'] = data_2['lemm_20_words'].apply(lambda x: x.count("соглашение"))
+        for i in uniq_lemm_classes[1:]:
+            data_2[f'count_{i}'] = data_2['lemm_20_words'].str.count(rf'\b{i}\b')
+
+    if use_latest:
+        del data_2['40_words']
+    else:
+        del data_2['text']
+        del data_2['20_words']
+        
+    if use_latest:
+        X_val = data_2.drop(columns=['class', data_2.columns[0]])
+    else:
+        X_val = data_2.drop(columns=['lemm_text', 'class', data_2.columns[0]])
+
     catboss = CatBoostClassifier()
-    catboss.load_model("catbossv1")
+    catboss.load_model('catbossv5_final' if use_latest else "catbossv1")
     y_pred = catboss.predict(X_val)
     return [i[0] for i in y_pred]
 
